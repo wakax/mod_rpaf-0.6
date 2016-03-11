@@ -82,6 +82,7 @@ typedef struct {
     const char         *headername;
     apr_array_header_t *proxy_ips;
     int                recursive;
+    int                proxy_ips_all;
 } rpaf_server_cfg;
 
 typedef struct {
@@ -96,6 +97,7 @@ static void *rpaf_create_server_cfg(apr_pool_t *p, server_rec *s) {
         return NULL;
 
     cfg->proxy_ips = apr_array_make(p, 0, sizeof(char *));
+    cfg->proxy_ips_all = 0;
     cfg->enable = 0;
     cfg->sethostname = 0;
 
@@ -136,6 +138,12 @@ static const char *rpaf_set_proxy_ip(cmd_parms *cmd, void *dummy, const char *pr
 
     /* check for valid syntax of ip */
     *(char **)apr_array_push(cfg->proxy_ips) = apr_pstrdup(cmd->pool, proxy_ip);
+
+    int i;
+    char **list = (char**)cfg->proxy_ips->elts;
+    for (i = 0; i < cfg->proxy_ips->nelts; i++) {
+        if (strcmp(list[i], "*") == 0) cfg->proxy_ips_all = 1;
+    }
     return NULL;
 }
 
@@ -219,7 +227,7 @@ static int change_remote_ip(request_rec *r) {
     if (!cfg->enable)
         return DECLINED;
 
-    if (is_in_array(r->connection->remote_ip, cfg->proxy_ips) == 1) {
+    if (cfg->proxy_ips_all == 1 || is_in_array(r->connection->remote_ip, cfg->proxy_ips) == 1) {
         /* check if cfg->headername is set and if it is use
            that instead of X-Forwarded-For by default */
         if (cfg->headername && (fwdvalue = apr_table_get(r->headers_in, cfg->headername))) {
